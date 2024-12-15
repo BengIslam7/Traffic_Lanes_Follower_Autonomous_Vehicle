@@ -10,30 +10,23 @@ from std_msgs.msg import Int32
 class CameraPub(Node):
     def __init__(self):
         super().__init__('camera_p')
-
+        self.interpreter = tf.lite.Interpreter(model_path='/home/isi/robot_ws/model.tflite')
+        self.interpreter.allocate_tensors()
+	    # Get input and output tensors
+        self.input_details = self.interpreter.get_input_details()
+        self.output_details = self.interpreter.get_output_details()
         # Créer un éditeur pour publier des messages sur le topic '/camera/image_raw'
         self.image_publisher = self.create_publisher(Image, '/camera/image_raw', 10)
         self.steering_angle_publisher = self.create_publisher(Int32, '/steering/angle', 10)
-
         # Initialiser le pont CvBridge pour la conversion entre OpenCV et ROS
         self.bridge = CvBridge()
-
         # Ouvrir la caméra (par défaut la caméra 0)
         self.cap = cv2.VideoCapture(0)
-
         # Load the TFLite model
-	    self.interpreter = tf.lite.Interpreter(model_path='')
-	    self.interpreter.allocate_tensors()
-
-	    # Get input and output tensors
-	    self.input_details = self.interpreter.get_input_details()
-	    self.output_details = self.interpreter.get_output_details()
-
         # Vérifier si la caméra s'est ouverte correctement
         if not self.cap.isOpened():
             self.get_logger().error("Erreur d'ouverture de la caméra")
             exit()
-
         # Publier les images toutes les 0.1 secondes
         self.timer = self.create_timer(0.1, self.timer_callback)
 
@@ -44,14 +37,18 @@ class CameraPub(Node):
             # Convertir l'image OpenCV en message ROS
             try:
                 ros_image = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
-                
-		        # Example inference
-		        self.interpreter.set_tensor(self.input_details[0]['index'], frame.reshape(1, 66, 200, 3))
-		        self.interpreter.invoke()
-		        output_data = self.interpreter.get_tensor(self.output_details[0]['index'])
-		        max_index = np.argmax(output_data)
-		        print(max_index)
-		        self.steering_angle_publisher.publish(max_index)
+                resized_f = cv2.resize(frame,(200,66))
+                resized_f = resized_f.astype(np.float32)
+                resized_f = resized_f / 255.0
+                self.interpreter.set_tensor(self.input_details[0]['index'], resized_f.reshape(1, 66, 200, 3))
+                self.interpreter.invoke()
+                output_data = self.interpreter.get_tensor(self.output_details[0]['index'])
+                max_index = np.argmax(output_data)
+                print(max_index)
+                # Créer un message ROS
+                msg = Int32()
+                msg.data = max_index
+                self.steering_angle_publisher.publish(msg)
                 self.get_logger().info('Steering angle publiée')
 		
                 # Publier l'image
