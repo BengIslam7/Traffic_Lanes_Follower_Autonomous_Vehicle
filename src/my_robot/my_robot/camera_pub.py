@@ -54,6 +54,7 @@ class CameraPub(Node):
                 # Publier l'image
                 self.image_publisher.publish(ros_image)
                 self.get_logger().info('Image publiée')
+                time.sleep(1)
 
             except Exception as e:
                 self.get_logger().error(f"Erreur lors de la conversion de l'image : {e}")
